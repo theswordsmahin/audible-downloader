@@ -46,8 +46,12 @@ def update_titles():
 	reader = csv.DictReader(file, delimiter='\t')
 	cur = con.cursor()
 
+	# Determine default status for new entries
+	# If AUTO_DOWNLOAD_NEW is False, mark new entries as skipped (-1) instead of pending (0)
+	default_status = 0 if os.getenv('AUTO_DOWNLOAD_NEW', 'True').lower() == 'true' else -1
+
 	for row in reader:
-		values = [row['asin'], row['title'], row['subtitle'], row['authors'], row['series_title'], row['narrators'], row['series_sequence'], row['release_date'], 0]
+		values = [row['asin'], row['title'], row['subtitle'], row['authors'], row['series_title'], row['narrators'], row['series_sequence'], row['release_date'], default_status]
 		if cur.execute('SELECT * FROM audiobooks WHERE asin=?', [row['asin']]).fetchone() is None:
 			cur.execute('insert into audiobooks values(?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
 	con.commit()

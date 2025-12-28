@@ -43,6 +43,7 @@ docker run -d \
 	--name=audiobookDownloader \
 	-e AUDIOBOOK_FOLDERS='True' \
 	-e SKIP_EXISTING_ON_STARTUP='False' \
+	-e AUTO_DOWNLOAD_NEW='True' \
 	-e AUDIOBOOK_PROCESSING_DIR='/processing' \
 	-e AUDIOBOOK_DESTINATION_DIR='/audiobooks' \
 	-p 5000:5000 \
@@ -125,7 +126,8 @@ The application uses three status levels:
 ### Environment Variables
 
 - `AUDIOBOOK_FOLDERS`: Set to `True` to organize audiobooks into folders following the AudiobookShelf convention (default: False)
-- `SKIP_EXISTING_ON_STARTUP`: Set to `True` to mark all pending books as "skipped" on first startup. This is useful when you have a large existing library and only want to download new books going forward. (default: False)
+- `SKIP_EXISTING_ON_STARTUP`: Set to `True` to mark all existing pending books as "skipped" on first startup. This is useful when you have a large existing library and only want to download new books going forward. (default: False)
+- `AUTO_DOWNLOAD_NEW`: Set to `False` to mark new library entries as "skipped" instead of "pending". When disabled, new books from library refreshes will require manual selection to download. (default: True)
 - `AUDIOBOOK_PROCESSING_DIR`: Directory for temporary processing and conversion. Should be fast local storage like an SSD (default: /processing)
 - `AUDIOBOOK_DESTINATION_DIR`: Final destination directory where completed audiobooks are moved. Can be a NAS mount (default: /audiobooks)
 
@@ -145,3 +147,32 @@ The application uses a two-stage approach for optimal performance:
    - Example: `-v /mnt/nas/audiobooks:/audiobooks`
 
 This approach ensures fast conversion on local storage, then transfers the finished file to your final destination (which might be slower network storage).
+
+### Common Configuration Scenarios
+
+**Scenario 1: Fully Automatic (Default)**
+```yaml
+AUTO_DOWNLOAD_NEW=True
+SKIP_EXISTING_ON_STARTUP=False
+```
+- New books from library refresh → Pending (auto-download)
+- Existing books on first startup → Pending (auto-download)
+- Best for: Fresh setups or users who want everything downloaded
+
+**Scenario 2: Manual Selection Only**
+```yaml
+AUTO_DOWNLOAD_NEW=False
+SKIP_EXISTING_ON_STARTUP=True
+```
+- New books from library refresh → Skipped (manual selection required)
+- Existing books on first startup → Skipped (manual selection required)
+- Best for: Users who want full control over what gets downloaded
+
+**Scenario 3: Auto-Download New Books Only**
+```yaml
+AUTO_DOWNLOAD_NEW=True
+SKIP_EXISTING_ON_STARTUP=True
+```
+- New books from library refresh → Pending (auto-download)
+- Existing books on first startup → Skipped (one-time skip)
+- Best for: Existing library users who want automatic downloads going forward

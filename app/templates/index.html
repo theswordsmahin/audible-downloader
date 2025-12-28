@@ -62,7 +62,6 @@
         <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
             <button type="submit" formaction="{{ url_for('trigger_download') }}" class="btn btn-success">Download All Pending ({{ pending_count }})</button>
             <button type="submit" formaction="{{ url_for('mark_pending') }}" class="btn btn-warning">Mark Selected as Pending</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAll()">Select All / None</button>
         </div>
 
         {% if audiobooks %}

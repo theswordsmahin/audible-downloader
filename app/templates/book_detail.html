@@ -65,8 +65,10 @@
                 <div>
                     {% if book['downloaded'] == 1 %}
                         <span class="badge badge-success">Downloaded</span>
-                    {% else %}
+                    {% elif book['downloaded'] == 0 %}
                         <span class="badge badge-warning">Pending Download</span>
+                    {% else %}
+                        <span class="badge" style="background-color: #e0e0e0; color: #666;">Skipped</span>
                     {% endif %}
                 </div>
             </div>
@@ -77,23 +79,26 @@
 
             {% if book['downloaded'] == 1 %}
             <form method="post" action="{{ url_for('reset_book', asin=book['asin']) }}" style="margin-bottom: 15px;">
-                <button type="submit" class="btn btn-warning" style="width: 100%;" onclick="return confirm('Are you sure you want to reset the download status? This will trigger a re-download.')">
-                    Reset Download Status
+                <button type="submit" class="btn btn-warning" style="width: 100%;" onclick="return confirm('Are you sure you want to reset the download status? This will mark it as pending for re-download.')">
+                    Mark as Pending (Re-download)
                 </button>
                 <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
-                    This will mark the book as not downloaded and trigger a re-download in the next cycle.
+                    This will mark the book as pending and it will be downloaded in the next download cycle.
+                </p>
+            </form>
+            {% elif book['downloaded'] == -1 %}
+            <form method="post" action="{{ url_for('reset_book', asin=book['asin']) }}" style="margin-bottom: 15px;">
+                <button type="submit" class="btn btn-success" style="width: 100%;">
+                    Mark as Pending (Download)
+                </button>
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
+                    This will mark the book as pending and it will be downloaded in the next download cycle.
                 </p>
             </form>
             {% else %}
-            <form method="post" action="{{ url_for('trigger_download') }}" style="margin-bottom: 15px;">
-                <input type="hidden" name="asin" value="{{ book['asin'] }}">
-                <button type="submit" class="btn btn-success" style="width: 100%;">
-                    Download Now
-                </button>
-                <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
-                    This will trigger an immediate download of this audiobook.
-                </p>
-            </form>
+            <p style="margin-bottom: 15px; padding: 15px; background-color: #fff3cd; border-radius: 4px; color: #856404;">
+                This book is pending download. Use "Download All Pending" button on the main page to start downloading.
+            </p>
             {% endif %}
 
             <form method="post" action="{{ url_for('delete_book', asin=book['asin']) }}" style="margin-bottom: 15px;">

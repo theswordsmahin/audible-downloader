@@ -11,9 +11,12 @@ Author/Series/audiobook.m4b or Author/audiobook.m4b if a Series doesn't exist.
 
 - **Web UI** for viewing and managing your audiobook library
 - **Real-time download status** with live progress tracking
+- **Smart status management** with three states: Downloaded, Pending, and Skipped
+- **Skip existing books on startup** to avoid downloading your entire library on first run
 - View all audiobooks with filtering by download status and search
 - Edit audiobook metadata (title, author, series, narrators, etc.)
-- Trigger downloads for one or more books
+- Download all pending books with a single click
+- Mark individual books as pending to download them
 - Reset download status to re-download books
 - Automatic background sync every 6 hours
 - Automatic conversion from AAX/AAXC to M4B format
@@ -39,6 +42,7 @@ replace the container id with your image hash
 docker run -d \
 	--name=audiobookDownloader \
 	-e AUDIOBOOK_FOLDERS='True' \
+	-e SKIP_EXISTING_ON_STARTUP='False' \
 	-p 5000:5000 \
 	-v /path/to/audiobookDownloader/config:/config \
 	-v /path/to/audiobookDownloader/audiobooks:/audiobooks \
@@ -90,12 +94,13 @@ Once the container is running, navigate to `http://localhost:5000` in your web b
 
 From the web UI you can:
 - View all your audiobooks with search and filtering
-- See download status (Downloaded/Pending)
+- See download status (Downloaded/Pending/Skipped)
 - **Monitor real-time download progress** with live status banner
 - See which book is currently being downloaded
 - Track progress with visual progress bar (e.g., "3 of 10 completed")
 - Edit audiobook metadata
-- Trigger downloads for selected books
+- Download all pending books with one click
+- Mark individual skipped books as pending to download them
 - Refresh your library from Audible
 - Reset download status to re-download books
 
@@ -106,3 +111,15 @@ When downloads or library refreshes are in progress, a status banner appears at 
 - The book currently being processed
 - Progress bar with completion count
 - Automatic page refresh when operations complete
+
+### Book Status Management
+
+The application uses three status levels:
+- **Downloaded (1)**: Book has been successfully downloaded and converted
+- **Pending (0)**: Book is queued for download
+- **Skipped (-1)**: Book is in your library but marked to skip downloading
+
+### Environment Variables
+
+- `AUDIOBOOK_FOLDERS`: Set to `True` to organize audiobooks into folders following the AudiobookShelf convention (default: False)
+- `SKIP_EXISTING_ON_STARTUP`: Set to `True` to mark all pending books as "skipped" on first startup. This is useful when you have a large existing library and only want to download new books going forward. (default: False)

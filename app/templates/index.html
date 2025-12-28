@@ -35,6 +35,10 @@
         <h3>{{ pending_count }}</h3>
         <p>Pending</p>
     </div>
+    <div class="stat-card">
+        <h3>{{ skipped_count }}</h3>
+        <p>Skipped</p>
+    </div>
 </div>
 
 <div class="card">
@@ -46,6 +50,7 @@
             <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Books</option>
             <option value="downloaded" {% if status_filter == 'downloaded' %}selected{% endif %}>Downloaded</option>
             <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="skipped" {% if status_filter == 'skipped' %}selected{% endif %}>Skipped</option>
         </select>
         <button type="submit" class="btn btn-sm">Filter</button>
         {% if search_query or status_filter != 'all' %}
@@ -53,10 +58,11 @@
         {% endif %}
     </form>
 
-    <form method="post" action="{{ url_for('trigger_download') }}" id="downloadForm">
-        <div style="margin-bottom: 15px;">
-            <button type="submit" class="btn btn-success">Download Selected</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAll()">Select All</button>
+    <form method="post" id="bulkActionForm">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="submit" formaction="{{ url_for('trigger_download') }}" class="btn btn-success">Download All Pending ({{ pending_count }})</button>
+            <button type="submit" formaction="{{ url_for('mark_pending') }}" class="btn btn-warning">Mark Selected as Pending</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAll()">Select All / None</button>
         </div>
 
         {% if audiobooks %}
@@ -81,31 +87,33 @@
                             {{ book['title'] }}{% if book['subtitle'] %}: {{ book['subtitle'] }}{% endif %}
                         </a>
                     </td>
-                    <td>{{ book['authors'] }}</td>
-                    <td>
-                        {% if book['series_title'] %}
-                            {{ book['series_title'] }}
-                            {% if book['series_sequence'] %}#{{ book['series_sequence'] }}{% endif %}
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                    <td>{{ book['narrators'] or '-' }}</td>
-                    <td>
-                        {% if book['downloaded'] == 1 %}
-                            <span class="badge badge-success">Downloaded</span>
-                        {% else %}
-                            <span class="badge badge-warning">Pending</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <a href="{{ url_for('book_detail', asin=book['asin']) }}" class="btn btn-sm">View</a>
-                        <a href="{{ url_for('edit_book', asin=book['asin']) }}" class="btn btn-sm btn-warning">Edit</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                <td>{{ book['authors'] }}</td>
+                <td>
+                    {% if book['series_title'] %}
+                        {{ book['series_title'] }}
+                        {% if book['series_sequence'] %}#{{ book['series_sequence'] }}{% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ book['narrators'] or '-' }}</td>
+                <td>
+                    {% if book['downloaded'] == 1 %}
+                        <span class="badge badge-success">Downloaded</span>
+                    {% elif book['downloaded'] == 0 %}
+                        <span class="badge badge-warning">Pending</span>
+                    {% else %}
+                        <span class="badge" style="background-color: #e0e0e0; color: #666;">Skipped</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('book_detail', asin=book['asin']) }}" class="btn btn-sm">View</a>
+                    <a href="{{ url_for('edit_book', asin=book['asin']) }}" class="btn btn-sm btn-warning">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
         {% else %}
         <p style="text-align: center; padding: 40px; color: #7f8c8d;">No audiobooks found. Try refreshing your library.</p>
         {% endif %}

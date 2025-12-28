@@ -164,6 +164,26 @@ def run_downloader_loop():
             print(f"[{datetime.now()}] Error in downloader loop: {e}")
         time.sleep(6 * 60 * 60)  # 6 hours
 
+# On startup, mark all existing pending books as skipped if env variable is set
+def initialize_skip_existing():
+    """Mark all pending books as skipped on first run if SKIP_EXISTING_ON_STARTUP is set"""
+    if os.getenv('SKIP_EXISTING_ON_STARTUP', 'False').lower() == 'true':
+        try:
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+            # Mark all books with downloaded=0 as skipped (-1)
+            result = cur.execute('UPDATE audiobooks SET downloaded = -1 WHERE downloaded = 0')
+            skipped_count = result.rowcount
+            conn.commit()
+            conn.close()
+            if skipped_count > 0:
+                print(f"[{datetime.now()}] Marked {skipped_count} existing books as skipped")
+        except Exception as e:
+            print(f"[{datetime.now()}] Error during skip initialization: {e}")
+
+# Run skip initialization before starting threads
+initialize_skip_existing()
+
 # Start background downloader thread
 downloader_thread = threading.Thread(target=run_downloader_loop, daemon=True)
 downloader_thread.start()
@@ -186,6 +206,8 @@ def index():
         query += ' AND downloaded = 1'
     elif status_filter == 'pending':
         query += ' AND downloaded = 0'
+    elif status_filter == 'skipped':
+        query += ' AND downloaded = -1'
 
     if search_query:
         query += ' AND (title LIKE ? OR authors LIKE ? OR series_title LIKE ?)'
@@ -202,7 +224,8 @@ def index():
     cur = conn.cursor()
     total_count = cur.execute('SELECT COUNT(*) FROM audiobooks').fetchone()[0]
     downloaded_count = cur.execute('SELECT COUNT(*) FROM audiobooks WHERE downloaded = 1').fetchone()[0]
-    pending_count = total_count - downloaded_count
+    pending_count = cur.execute('SELECT COUNT(*) FROM audiobooks WHERE downloaded = 0').fetchone()[0]
+    skipped_count = cur.execute('SELECT COUNT(*) FROM audiobooks WHERE downloaded = -1').fetchone()[0]
     conn.close()
 
     return render_template('index.html',
@@ -211,7 +234,8 @@ def index():
                          search_query=search_query,
                          total_count=total_count,
                          downloaded_count=downloaded_count,
-                         pending_count=pending_count)
+                         pending_count=pending_count,
+                         skipped_count=skipped_count)
 
 @app.route('/book/<asin>')
 def book_detail(asin):
@@ -336,37 +360,26 @@ def trigger_refresh():
 
 @app.route('/trigger/download', methods=['POST'])
 def trigger_download():
-    """Trigger download of pending audiobooks"""
-    asin_list = request.form.getlist('asin')
-
-    if not asin_list:
-        flash('No audiobooks selected', 'warning')
-        return redirect(url_for('index'))
-
+    """Trigger download of all pending audiobooks"""
     with status_lock:
         if download_status['is_downloading'] or download_status['is_refreshing']:
             flash('A download or refresh is already in progress', 'warning')
             return redirect(url_for('index'))
 
-    # Reset download status for selected books
+    # Get count of pending books
     conn = get_db()
     cur = conn.cursor()
+    pending_count = cur.execute('SELECT COUNT(*) FROM audiobooks WHERE downloaded = 0').fetchone()[0]
+    conn.close()
 
-    try:
-        for asin in asin_list:
-            cur.execute('UPDATE audiobooks SET downloaded = 0 WHERE asin = ?', [asin])
-        conn.commit()
-    except Exception as e:
-        flash(f'Error preparing download: {e}', 'error')
-        conn.close()
+    if pending_count == 0:
+        flash('No pending audiobooks to download', 'warning')
         return redirect(url_for('index'))
-    finally:
-        conn.close()
 
     def download_task():
         with status_lock:
             download_status['is_downloading'] = True
-            download_status['total_to_download'] = len(asin_list)
+            download_status['total_to_download'] = pending_count
             download_status['downloaded_count'] = 0
             download_status['last_update'] = datetime.now().isoformat()
             download_status['error'] = None
@@ -386,7 +399,31 @@ def trigger_download():
 
     thread = threading.Thread(target=download_task, daemon=True)
     thread.start()
-    flash(f'Download started for {len(asin_list)} audiobook(s)', 'success')
+    flash(f'Download started for {pending_count} pending audiobook(s)', 'success')
+
+    return redirect(url_for('index'))
+
+@app.route('/mark-pending', methods=['POST'])
+def mark_pending():
+    """Mark selected audiobooks as pending"""
+    asin_list = request.form.getlist('asin')
+
+    if not asin_list:
+        flash('No audiobooks selected', 'warning')
+        return redirect(url_for('index'))
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    try:
+        for asin in asin_list:
+            cur.execute('UPDATE audiobooks SET downloaded = 0 WHERE asin = ?', [asin])
+        conn.commit()
+        flash(f'Marked {len(asin_list)} book(s) as pending for download', 'success')
+    except Exception as e:
+        flash(f'Error marking books as pending: {e}', 'error')
+    finally:
+        conn.close()
 
     return redirect(url_for('index'))
 

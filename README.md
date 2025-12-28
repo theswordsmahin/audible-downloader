@@ -10,12 +10,14 @@ Author/Series/audiobook.m4b or Author/audiobook.m4b if a Series doesn't exist.
 ## Features
 
 - **Web UI** for viewing and managing your audiobook library
+- **Real-time download status** with live progress tracking
 - View all audiobooks with filtering by download status and search
 - Edit audiobook metadata (title, author, series, narrators, etc.)
 - Trigger downloads for one or more books
 - Reset download status to re-download books
 - Automatic background sync every 6 hours
 - Automatic conversion from AAX/AAXC to M4B format
+- Visual progress indicators showing current book being downloaded
 
 # Run Image
 
@@ -89,7 +91,18 @@ Once the container is running, navigate to `http://localhost:5000` in your web b
 From the web UI you can:
 - View all your audiobooks with search and filtering
 - See download status (Downloaded/Pending)
+- **Monitor real-time download progress** with live status banner
+- See which book is currently being downloaded
+- Track progress with visual progress bar (e.g., "3 of 10 completed")
 - Edit audiobook metadata
 - Trigger downloads for selected books
 - Refresh your library from Audible
 - Reset download status to re-download books
+
+### Real-Time Status Tracking
+
+When downloads or library refreshes are in progress, a status banner appears at the top of the page showing:
+- Current operation (Downloading/Refreshing)
+- The book currently being processed
+- Progress bar with completion count
+- Automatic page refresh when operations complete

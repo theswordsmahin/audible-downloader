@@ -50,7 +50,9 @@ def download_new_titles_with_status():
     import shutil
     import json
 
-    con = get_db()
+    # Create a new connection for this thread
+    con = sqlite3.connect(db_path)
+    con.row_factory = sqlite3.Row
     cur = con.cursor()
     to_download = cur.execute('SELECT asin, title FROM audiobooks WHERE downloaded=?', [0]).fetchall()
 

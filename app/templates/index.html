@@ -3,6 +3,25 @@
 {% block title %}Library - Audible Downloader{% endblock %}
 
 {% block content %}
+<!-- Download Status Banner -->
+<div id="downloadStatus" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="flex: 1;">
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <div class="spinner" style="width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px;"></div>
+                <h3 id="statusTitle" style="margin: 0; font-size: 18px;">Processing...</h3>
+            </div>
+            <p id="statusMessage" style="margin: 5px 0; opacity: 0.9; font-size: 14px;">Preparing download...</p>
+            <div id="progressContainer" style="display: none; margin-top: 10px;">
+                <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px; overflow: hidden;">
+                    <div id="progressBar" style="background: white; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="progressText" style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.8;">0 of 0 completed</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="stats">
     <div class="stat-card">
         <h3>{{ total_count }}</h3>
@@ -101,5 +120,91 @@
             checkbox.checked = selectAll.checked;
         }
     }
+
+    // Poll for download status
+    let statusCheckInterval = null;
+
+    function updateDownloadStatus() {
+        fetch('/api/download-status')
+            .then(response => response.json())
+            .then(data => {
+                const statusBanner = document.getElementById('downloadStatus');
+                const statusTitle = document.getElementById('statusTitle');
+                const statusMessage = document.getElementById('statusMessage');
+                const progressContainer = document.getElementById('progressContainer');
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+
+                // Check if any operation is in progress
+                if (data.is_downloading || data.is_refreshing) {
+                    statusBanner.style.display = 'block';
+
+                    if (data.is_refreshing) {
+                        statusTitle.textContent = 'Refreshing Library';
+                        statusMessage.textContent = 'Fetching latest books from Audible...';
+                        progressContainer.style.display = 'none';
+                    } else if (data.is_downloading) {
+                        statusTitle.textContent = 'Downloading Audiobooks';
+
+                        if (data.current_book) {
+                            statusMessage.textContent = 'Currently downloading: ' + data.current_book;
+                        } else {
+                            statusMessage.textContent = 'Preparing downloads...';
+                        }
+
+                        // Show progress if we have total count
+                        if (data.total_to_download > 0) {
+                            progressContainer.style.display = 'block';
+                            const percentage = (data.downloaded_count / data.total_to_download) * 100;
+                            progressBar.style.width = percentage + '%';
+                            progressText.textContent = data.downloaded_count + ' of ' + data.total_to_download + ' completed';
+                        } else {
+                            progressContainer.style.display = 'none';
+                        }
+                    }
+
+                    // Show error if present
+                    if (data.error) {
+                        statusMessage.textContent = 'Error: ' + data.error;
+                        statusBanner.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                    }
+
+                    // Start polling if not already started
+                    if (!statusCheckInterval) {
+                        statusCheckInterval = setInterval(updateDownloadStatus, 2000);
+                    }
+                } else {
+                    // No operation in progress
+                    statusBanner.style.display = 'none';
+
+                    // Stop polling
+                    if (statusCheckInterval) {
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+
+                        // Reload the page to show updated book list
+                        if (data.last_update) {
+                            location.reload();
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching download status:', error);
+            });
+    }
+
+    // Check status on page load
+    updateDownloadStatus();
+
+    // Also check periodically in case a download starts
+    setInterval(updateDownloadStatus, 5000);
 </script>
+
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
 {% endblock %}

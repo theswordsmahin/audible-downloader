@@ -12,11 +12,119 @@ app.secret_key = os.urandom(24)
 config = "/config"
 db_path = config + "/audiobooks.db"
 
+# Global download status tracking
+download_status = {
+    'is_downloading': False,
+    'is_refreshing': False,
+    'current_book': None,
+    'total_to_download': 0,
+    'downloaded_count': 0,
+    'current_asin': None,
+    'last_update': None,
+    'error': None
+}
+status_lock = threading.Lock()
+
 def get_db():
     """Get database connection"""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
+
+def update_download_status(asin, book_title):
+    """Update the current download status"""
+    with status_lock:
+        download_status['current_asin'] = asin
+        download_status['current_book'] = book_title
+        download_status['last_update'] = datetime.now().isoformat()
+
+def increment_download_count():
+    """Increment the downloaded count"""
+    with status_lock:
+        download_status['downloaded_count'] += 1
+        download_status['last_update'] = datetime.now().isoformat()
+
+def download_new_titles_with_status():
+    """Download new titles with status tracking"""
+    import subprocess
+    import shutil
+    import json
+
+    con = get_db()
+    cur = con.cursor()
+    to_download = cur.execute('SELECT asin, title FROM audiobooks WHERE downloaded=?', [0]).fetchall()
+
+    for row in to_download:
+        asin = row['asin']
+        title = row['title']
+
+        # Update status
+        update_download_status(asin, title)
+
+        try:
+            # Download using audible CLI
+            subprocess.run(["audible", "-v", "error", "download", "-a", asin, "--aax-fallback",
+                          "--timeout", "0", "-f", "asin_ascii", "--ignore-podcasts",
+                          "-o", audiobookDownloader.audiobook_download_directory])
+
+            # Process downloaded files
+            audiobooks = [each for each in os.listdir(audiobookDownloader.audiobook_download_directory)
+                         if each.endswith(('.aax', '.aaxc'))]
+
+            for audiobook in audiobooks:
+                new_asin = audiobook.split("_")[0]
+                asin_check = cur.execute("SELECT title FROM audiobooks WHERE asin=?", [new_asin]).fetchone()
+
+                if asin_check is None:
+                    new_name = audiobook.replace(new_asin, asin)
+                    shutil.move(os.path.join(audiobookDownloader.audiobook_download_directory, audiobook),
+                              os.path.join(audiobookDownloader.audiobook_download_directory, new_name))
+                    audiobook = new_name
+
+                current_asin = audiobook.split("_")[0]
+
+                # Mark as downloaded
+                cur.execute('UPDATE audiobooks SET downloaded = 1 WHERE asin = ?', [current_asin])
+                con.commit()
+
+                src = os.path.join(audiobookDownloader.audiobook_download_directory, audiobook)
+                aax_book = audiobook.endswith('.aax')
+                audiobook_base = audiobook[:-3] if aax_book else audiobook[:-4]
+
+                des = (audiobookDownloader.create_audiobook_folder(current_asin) + audiobook_base + "m4b"
+                      if audiobookDownloader.use_folders
+                      else os.path.join(audiobookDownloader.audiobook_directory, audiobook_base + "m4b"))
+
+                # Convert file
+                if aax_book:
+                    subprocess.run(["ffmpeg", "-activation_bytes", audiobookDownloader.activation_bytes,
+                                  "-i", src, "-c", "copy", des])
+                    os.remove(src)
+                else:
+                    vouchers = [each for each in os.listdir(audiobookDownloader.audiobook_download_directory)
+                              if each.endswith('.voucher')]
+                    for voucher in vouchers:
+                        voucher_path = os.path.join(audiobookDownloader.audiobook_download_directory, voucher)
+                        json_voucher = json.load(open(voucher_path))["content_license"]["license_response"]
+                        subprocess.run(["ffmpeg", "-audible_key", json_voucher["key"],
+                                      "-audible_iv", json_voucher["iv"], "-i", src, "-c", "copy", des])
+                        os.remove(src)
+                        os.remove(src[:-4] + "voucher")
+
+                increment_download_count()
+
+        except Exception as e:
+            print(f"Error downloading {asin}: {e}")
+            with status_lock:
+                download_status['error'] = f"Error downloading {title}: {str(e)}"
+
+    # Cleanup any remaining vouchers
+    vouchers = [each for each in os.listdir(audiobookDownloader.audiobook_download_directory)
+               if each.endswith('.voucher')]
+    for voucher in vouchers:
+        os.remove(os.path.join(audiobookDownloader.audiobook_download_directory, voucher))
+
+    con.close()
 
 def run_downloader_loop():
     """Background thread to run the downloader loop"""
@@ -173,11 +281,30 @@ def reset_book(asin):
 @app.route('/trigger/refresh')
 def trigger_refresh():
     """Trigger library refresh from Audible"""
-    try:
-        audiobookDownloader.update_titles()
-        flash('Library refresh completed successfully', 'success')
-    except Exception as e:
-        flash(f'Error refreshing library: {e}', 'error')
+    with status_lock:
+        if download_status['is_refreshing'] or download_status['is_downloading']:
+            flash('A refresh or download is already in progress', 'warning')
+            return redirect(url_for('index'))
+
+    def refresh_task():
+        with status_lock:
+            download_status['is_refreshing'] = True
+            download_status['last_update'] = datetime.now().isoformat()
+            download_status['error'] = None
+
+        try:
+            audiobookDownloader.update_titles()
+        except Exception as e:
+            with status_lock:
+                download_status['error'] = str(e)
+        finally:
+            with status_lock:
+                download_status['is_refreshing'] = False
+                download_status['last_update'] = datetime.now().isoformat()
+
+    thread = threading.Thread(target=refresh_task, daemon=True)
+    thread.start()
+    flash('Library refresh started in background', 'success')
 
     return redirect(url_for('index'))
 
@@ -190,6 +317,11 @@ def trigger_download():
         flash('No audiobooks selected', 'warning')
         return redirect(url_for('index'))
 
+    with status_lock:
+        if download_status['is_downloading'] or download_status['is_refreshing']:
+            flash('A download or refresh is already in progress', 'warning')
+            return redirect(url_for('index'))
+
     # Reset download status for selected books
     conn = get_db()
     cur = conn.cursor()
@@ -198,14 +330,37 @@ def trigger_download():
         for asin in asin_list:
             cur.execute('UPDATE audiobooks SET downloaded = 0 WHERE asin = ?', [asin])
         conn.commit()
-
-        # Trigger immediate download
-        audiobookDownloader.download_new_titles()
-        flash(f'Download triggered for {len(asin_list)} audiobook(s)', 'success')
     except Exception as e:
-        flash(f'Error triggering download: {e}', 'error')
+        flash(f'Error preparing download: {e}', 'error')
+        conn.close()
+        return redirect(url_for('index'))
     finally:
         conn.close()
+
+    def download_task():
+        with status_lock:
+            download_status['is_downloading'] = True
+            download_status['total_to_download'] = len(asin_list)
+            download_status['downloaded_count'] = 0
+            download_status['last_update'] = datetime.now().isoformat()
+            download_status['error'] = None
+
+        try:
+            # Use the modified download function with status tracking
+            download_new_titles_with_status()
+        except Exception as e:
+            with status_lock:
+                download_status['error'] = str(e)
+        finally:
+            with status_lock:
+                download_status['is_downloading'] = False
+                download_status['current_book'] = None
+                download_status['current_asin'] = None
+                download_status['last_update'] = datetime.now().isoformat()
+
+    thread = threading.Thread(target=download_task, daemon=True)
+    thread.start()
+    flash(f'Download started for {len(asin_list)} audiobook(s)', 'success')
 
     return redirect(url_for('index'))
 
@@ -226,6 +381,28 @@ def api_stats():
         'downloaded': downloaded_count,
         'pending': pending_count
     })
+
+@app.route('/api/download-status')
+def api_download_status():
+    """API endpoint for current download status"""
+    with status_lock:
+        status = download_status.copy()
+
+    # Get book details if currently downloading
+    if status['current_asin']:
+        conn = get_db()
+        cur = conn.cursor()
+        book = cur.execute('SELECT title, authors FROM audiobooks WHERE asin = ?',
+                          [status['current_asin']]).fetchone()
+        conn.close()
+
+        if book:
+            status['current_book_details'] = {
+                'title': book['title'],
+                'authors': book['authors']
+            }
+
+    return jsonify(status)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

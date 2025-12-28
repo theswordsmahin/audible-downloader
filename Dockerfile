@@ -11,7 +11,6 @@ ENV AUDIBLE_CONFIG_DIR=/config
 RUN mkdir -p /audiobooks /config /app
 
 COPY requirements.txt /app/
-COPY app/ /app/
 
 RUN apk update \
 	&& apk add --update --no-cache ffmpeg
@@ -22,4 +21,5 @@ RUN apk del gcc musl-dev python3-dev
 
 EXPOSE 5000
 
+COPY app/ /app/
 CMD ["python", "/app/webui.py"]

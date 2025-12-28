@@ -43,9 +43,12 @@ docker run -d \
 	--name=audiobookDownloader \
 	-e AUDIOBOOK_FOLDERS='True' \
 	-e SKIP_EXISTING_ON_STARTUP='False' \
+	-e AUDIOBOOK_PROCESSING_DIR='/processing' \
+	-e AUDIOBOOK_DESTINATION_DIR='/audiobooks' \
 	-p 5000:5000 \
-	-v /path/to/audiobookDownloader/config:/config \
-	-v /path/to/audiobookDownloader/audiobooks:/audiobooks \
+	-v /path/to/config:/config \
+	-v /path/to/local/processing:/processing \
+	-v /path/to/nas/audiobooks:/audiobooks \
 	container id
 ```
 
@@ -123,3 +126,22 @@ The application uses three status levels:
 
 - `AUDIOBOOK_FOLDERS`: Set to `True` to organize audiobooks into folders following the AudiobookShelf convention (default: False)
 - `SKIP_EXISTING_ON_STARTUP`: Set to `True` to mark all pending books as "skipped" on first startup. This is useful when you have a large existing library and only want to download new books going forward. (default: False)
+- `AUDIOBOOK_PROCESSING_DIR`: Directory for temporary processing and conversion. Should be fast local storage like an SSD (default: /processing)
+- `AUDIOBOOK_DESTINATION_DIR`: Final destination directory where completed audiobooks are moved. Can be a NAS mount (default: /audiobooks)
+
+### Processing vs Destination Directories
+
+The application uses a two-stage approach for optimal performance:
+
+1. **Processing Directory** (`AUDIOBOOK_PROCESSING_DIR`):
+   - Files are downloaded to `/app` (in-container)
+   - Conversion from AAX/AAXC to M4B happens here
+   - Should be mounted to fast local storage (SSD) for best performance
+   - Example: `-v /local/ssd/processing:/processing`
+
+2. **Destination Directory** (`AUDIOBOOK_DESTINATION_DIR`):
+   - Completed M4B files are moved here after conversion
+   - Can be slow network storage like a NAS
+   - Example: `-v /mnt/nas/audiobooks:/audiobooks`
+
+This approach ensures fast conversion on local storage, then transfers the finished file to your final destination (which might be slower network storage).

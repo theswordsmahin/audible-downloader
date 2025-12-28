@@ -8,7 +8,10 @@ import csv
 
 config = "/config"
 audiobook_download_directory = "/app"
-audiobook_directory = "/audiobooks"
+# Processing directory - where conversion happens (should be fast local storage)
+audiobook_processing_directory = os.getenv('AUDIOBOOK_PROCESSING_DIR', '/processing')
+# Final destination directory - where completed files are moved (can be NAS)
+audiobook_directory = os.getenv('AUDIOBOOK_DESTINATION_DIR', '/audiobooks')
 use_folders = True if os.getenv('AUDIOBOOK_FOLDERS') == "True" else False
 
 con = sqlite3.connect(config + "/audiobooks.db")
@@ -100,18 +103,25 @@ def download_new_titles():
 			src = audiobook_download_directory + "/" + audiobook
 			aax_book = True if audiobook[-3:] == "aax" else False
 			audiobook = audiobook[:-3] if aax_book else audiobook[:-4]
-			des = create_audiobook_folder(asin) + audiobook + "m4b" if use_folders else audiobook_directory + "/" + audiobook + "m4b"
+
+			# Convert to processing directory first (fast local storage)
+			os.makedirs(audiobook_processing_directory, exist_ok=True)
+			processing_file = audiobook_processing_directory + "/" + audiobook + "m4b"
 
 			if aax_book:
-				subprocess.run(["ffmpeg", "-activation_bytes", activation_bytes, "-i", src, "-c", "copy", des])
+				subprocess.run(["ffmpeg", "-activation_bytes", activation_bytes, "-i", src, "-c", "copy", processing_file])
 				os.remove(src)
 			else:
 				vouchers = [each for each in os.listdir(audiobook_download_directory) if each.endswith('.voucher')]
 				for voucher in vouchers:
 					json_voucher = json.load(open(audiobook_download_directory + "/" + voucher))["content_license"]["license_response"]
-					subprocess.run(["ffmpeg", "-audible_key", json_voucher["key"], "-audible_iv", json_voucher["iv"], "-i", src, "-c", "copy", des])
+					subprocess.run(["ffmpeg", "-audible_key", json_voucher["key"], "-audible_iv", json_voucher["iv"], "-i", src, "-c", "copy", processing_file])
 					os.remove(src)
 					os.remove(src[:-4] + "voucher")
+
+			# Move converted file to final destination
+			final_destination = create_audiobook_folder(asin) + audiobook + "m4b" if use_folders else audiobook_directory + "/" + audiobook + "m4b"
+			shutil.move(processing_file, final_destination)
 
 	# is some kind of issue occured make sure every voucher is deleted
 	vouchers = [each for each in os.listdir(audiobook_download_directory) if each.endswith('.voucher')]

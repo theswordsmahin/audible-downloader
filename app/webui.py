@@ -117,14 +117,14 @@ def download_new_titles_with_status():
                 aax_book = audiobook.endswith('.aax')
                 audiobook_base = audiobook[:-3] if aax_book else audiobook[:-4]
 
-                des = (create_audiobook_folder_thread_safe(current_asin, cur) + audiobook_base + "m4b"
-                      if audiobookDownloader.use_folders
-                      else os.path.join(audiobookDownloader.audiobook_directory, audiobook_base + "m4b"))
+                # Convert to processing directory first (fast local storage)
+                os.makedirs(audiobookDownloader.audiobook_processing_directory, exist_ok=True)
+                processing_file = os.path.join(audiobookDownloader.audiobook_processing_directory, audiobook_base + "m4b")
 
                 # Convert file
                 if aax_book:
                     subprocess.run(["ffmpeg", "-activation_bytes", audiobookDownloader.activation_bytes,
-                                  "-i", src, "-c", "copy", des])
+                                  "-i", src, "-c", "copy", processing_file])
                     os.remove(src)
                 else:
                     vouchers = [each for each in os.listdir(audiobookDownloader.audiobook_download_directory)
@@ -133,9 +133,15 @@ def download_new_titles_with_status():
                         voucher_path = os.path.join(audiobookDownloader.audiobook_download_directory, voucher)
                         json_voucher = json.load(open(voucher_path))["content_license"]["license_response"]
                         subprocess.run(["ffmpeg", "-audible_key", json_voucher["key"],
-                                      "-audible_iv", json_voucher["iv"], "-i", src, "-c", "copy", des])
+                                      "-audible_iv", json_voucher["iv"], "-i", src, "-c", "copy", processing_file])
                         os.remove(src)
                         os.remove(src[:-4] + "voucher")
+
+                # Move converted file to final destination
+                final_destination = (create_audiobook_folder_thread_safe(current_asin, cur) + audiobook_base + "m4b"
+                                   if audiobookDownloader.use_folders
+                                   else os.path.join(audiobookDownloader.audiobook_directory, audiobook_base + "m4b"))
+                shutil.move(processing_file, final_destination)
 
                 increment_download_count()
 

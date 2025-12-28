@@ -8,7 +8,7 @@ WORKDIR /app
 
 ENV AUDIBLE_CONFIG_DIR=/config
 
-RUN mkdir -p /audiobooks /config /app
+RUN mkdir -p /audiobooks /config /app /processing
 
 RUN apk update \
 	&& apk add --update --no-cache ffmpeg

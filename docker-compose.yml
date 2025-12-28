@@ -7,9 +7,12 @@ services:
     environment:
       - AUDIOBOOK_FOLDERS=True
       - SKIP_EXISTING_ON_STARTUP=False  # Set to True to mark all existing pending books as skipped on first startup
+      - AUDIOBOOK_PROCESSING_DIR=/processing  # Fast local storage for conversion (e.g., local SSD)
+      - AUDIOBOOK_DESTINATION_DIR=/audiobooks  # Final destination (e.g., NAS mount)
     ports:
       - "5000:5000"
     volumes:
       - ./config:/config
-      - ./audiobooks:/audiobooks
+      - ./processing:/processing  # Mount a local directory for fast processing
+      - ./audiobooks:/audiobooks  # Mount your NAS directory here
     restart: unless-stopped

@@ -41,20 +41,27 @@ if activation_bytes is None:
 # get library from audible cli
 # update db with all new titles
 def update_titles():
-	subprocess.run(["audible", "library", "export"])
-	file = lines = open("library.tsv")
-	reader = csv.DictReader(file, delimiter='\t')
-	cur = con.cursor()
+	# Export to a specific file path in the config directory
+	library_file = os.path.join(config, "library.tsv")
+	subprocess.run(["audible", "library", "export", "-o", library_file])
+
+	# Create a new connection for thread safety
+	conn = sqlite3.connect(config + "/audiobooks.db")
+	cur = conn.cursor()
 
 	# Determine default status for new entries
 	# If AUTO_DOWNLOAD_NEW is False, mark new entries as skipped (-1) instead of pending (0)
 	default_status = 0 if os.getenv('AUTO_DOWNLOAD_NEW', 'True').lower() == 'true' else -1
 
-	for row in reader:
-		values = [row['asin'], row['title'], row['subtitle'], row['authors'], row['series_title'], row['narrators'], row['series_sequence'], row['release_date'], default_status]
-		if cur.execute('SELECT * FROM audiobooks WHERE asin=?', [row['asin']]).fetchone() is None:
-			cur.execute('insert into audiobooks values(?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
-	con.commit()
+	with open(library_file, 'r') as file:
+		reader = csv.DictReader(file, delimiter='\t')
+		for row in reader:
+			values = [row['asin'], row['title'], row['subtitle'], row['authors'], row['series_title'], row['narrators'], row['series_sequence'], row['release_date'], default_status]
+			if cur.execute('SELECT * FROM audiobooks WHERE asin=?', [row['asin']]).fetchone() is None:
+				cur.execute('insert into audiobooks values(?, ?, ?, ?, ?, ?, ?, ?, ?)', values)
+
+	conn.commit()
+	conn.close()
 
 def create_audiobook_folder(asin):
 	cur = con.cursor()

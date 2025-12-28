@@ -44,6 +44,30 @@ def increment_download_count():
         download_status['downloaded_count'] += 1
         download_status['last_update'] = datetime.now().isoformat()
 
+def create_audiobook_folder_thread_safe(asin, cursor):
+    """Thread-safe version of create_audiobook_folder that uses provided cursor"""
+    book = cursor.execute('SELECT authors, title, series_title, subtitle, narrators, series_sequence, release_date FROM audiobooks WHERE asin=?', [asin]).fetchone()
+
+    authors = book['authors']
+    title = book['title']
+    series_title = book['series_title']
+    subtitle = book['subtitle']
+    narrators = book['narrators']
+    series_sequence = book['series_sequence']
+    release_date = book['release_date']
+
+    directory = audiobookDownloader.audiobook_directory + "/" + authors + "/"
+    if series_title:  # if series title exists the sequence also exists
+        directory = directory + series_title + "/" + str(series_sequence) + " - "
+    directory = directory + release_date.split("-")[0] + " - " + title
+    if subtitle:
+        directory = directory + " - " + subtitle
+    directory = directory + " {" + narrators + "}" + "/"
+
+    os.makedirs(os.path.dirname(directory), exist_ok=True)
+
+    return directory
+
 def download_new_titles_with_status():
     """Download new titles with status tracking"""
     import subprocess
@@ -93,7 +117,7 @@ def download_new_titles_with_status():
                 aax_book = audiobook.endswith('.aax')
                 audiobook_base = audiobook[:-3] if aax_book else audiobook[:-4]
 
-                des = (audiobookDownloader.create_audiobook_folder(current_asin) + audiobook_base + "m4b"
+                des = (create_audiobook_folder_thread_safe(current_asin, cur) + audiobook_base + "m4b"
                       if audiobookDownloader.use_folders
                       else os.path.join(audiobookDownloader.audiobook_directory, audiobook_base + "m4b"))
 

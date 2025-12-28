@@ -8,6 +8,7 @@ WORKDIR /app
 
 ENV AUDIBLE_CONFIG_DIR=/config
 
+# Create directories with proper permissions
 RUN mkdir -p /audiobooks /config /app /processing
 
 RUN apk update \
@@ -19,7 +20,17 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 RUN apk del gcc musl-dev python3-dev
 
+# Create a non-root user and group
+RUN addgroup -g 1000 audible && \
+    adduser -D -u 1000 -G audible audible
+
+# Set ownership of directories to the audible user
+RUN chown -R audible:audible /audiobooks /config /app /processing
+
+# Switch to non-root user
+USER audible
+
 EXPOSE 5000
 
-COPY app/ /app/
+COPY --chown=audible:audible app/ /app/
 CMD ["python", "/app/webui.py"]

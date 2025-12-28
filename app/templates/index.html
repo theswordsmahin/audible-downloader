@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Library - Audible Downloader{% endblock %}
+
+{% block content %}
+<div class="stats">
+    <div class="stat-card">
+        <h3>{{ total_count }}</h3>
+        <p>Total Books</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ downloaded_count }}</h3>
+        <p>Downloaded</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ pending_count }}</h3>
+        <p>Pending</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 15px;">Audiobook Library</h2>
+
+    <form method="get" action="{{ url_for('index') }}" class="filters">
+        <input type="text" name="search" placeholder="Search by title, author, or series..." value="{{ search_query }}">
+        <select name="status" onchange="this.form.submit()">
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Books</option>
+            <option value="downloaded" {% if status_filter == 'downloaded' %}selected{% endif %}>Downloaded</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+        </select>
+        <button type="submit" class="btn btn-sm">Filter</button>
+        {% if search_query or status_filter != 'all' %}
+            <a href="{{ url_for('index') }}" class="btn btn-sm btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+
+    <form method="post" action="{{ url_for('trigger_download') }}" id="downloadForm">
+        <div style="margin-bottom: 15px;">
+            <button type="submit" class="btn btn-success">Download Selected</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAll()">Select All</button>
+        </div>
+
+        {% if audiobooks %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleAll()"></th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Series</th>
+                    <th>Narrators</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for book in audiobooks %}
+                <tr>
+                    <td><input type="checkbox" name="asin" value="{{ book['asin'] }}" class="book-checkbox"></td>
+                    <td>
+                        <a href="{{ url_for('book_detail', asin=book['asin']) }}" style="text-decoration: none; color: #3498db;">
+                            {{ book['title'] }}{% if book['subtitle'] %}: {{ book['subtitle'] }}{% endif %}
+                        </a>
+                    </td>
+                    <td>{{ book['authors'] }}</td>
+                    <td>
+                        {% if book['series_title'] %}
+                            {{ book['series_title'] }}
+                            {% if book['series_sequence'] %}#{{ book['series_sequence'] }}{% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ book['narrators'] or '-' }}</td>
+                    <td>
+                        {% if book['downloaded'] == 1 %}
+                            <span class="badge badge-success">Downloaded</span>
+                        {% else %}
+                            <span class="badge badge-warning">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('book_detail', asin=book['asin']) }}" class="btn btn-sm">View</a>
+                        <a href="{{ url_for('edit_book', asin=book['asin']) }}" class="btn btn-sm btn-warning">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="text-align: center; padding: 40px; color: #7f8c8d;">No audiobooks found. Try refreshing your library.</p>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+    function toggleAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.getElementsByClassName('book-checkbox');
+        for (let checkbox of checkboxes) {
+            checkbox.checked = selectAll.checked;
+        }
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{{ book['title'] }} - Audible Downloader{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>{{ book['title'] }}</h2>
+        <div>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Back to Library</a>
+            <a href="{{ url_for('edit_book', asin=book['asin']) }}" class="btn btn-warning">Edit</a>
+        </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <h3 style="margin-bottom: 15px; color: #2c3e50;">Book Information</h3>
+
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">TITLE</strong>
+                <div>{{ book['title'] }}</div>
+            </div>
+
+            {% if book['subtitle'] %}
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">SUBTITLE</strong>
+                <div>{{ book['subtitle'] }}</div>
+            </div>
+            {% endif %}
+
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">AUTHOR(S)</strong>
+                <div>{{ book['authors'] }}</div>
+            </div>
+
+            {% if book['series_title'] %}
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">SERIES</strong>
+                <div>
+                    {{ book['series_title'] }}
+                    {% if book['series_sequence'] %}(Book {{ book['series_sequence'] }}){% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if book['narrators'] %}
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">NARRATOR(S)</strong>
+                <div>{{ book['narrators'] }}</div>
+            </div>
+            {% endif %}
+
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">RELEASE DATE</strong>
+                <div>{{ book['release_date'] }}</div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">ASIN</strong>
+                <div style="font-family: monospace;">{{ book['asin'] }}</div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <strong style="display: block; color: #7f8c8d; font-size: 12px; margin-bottom: 3px;">STATUS</strong>
+                <div>
+                    {% if book['downloaded'] == 1 %}
+                        <span class="badge badge-success">Downloaded</span>
+                    {% else %}
+                        <span class="badge badge-warning">Pending Download</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 style="margin-bottom: 15px; color: #2c3e50;">Actions</h3>
+
+            {% if book['downloaded'] == 1 %}
+            <form method="post" action="{{ url_for('reset_book', asin=book['asin']) }}" style="margin-bottom: 15px;">
+                <button type="submit" class="btn btn-warning" style="width: 100%;" onclick="return confirm('Are you sure you want to reset the download status? This will trigger a re-download.')">
+                    Reset Download Status
+                </button>
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
+                    This will mark the book as not downloaded and trigger a re-download in the next cycle.
+                </p>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('trigger_download') }}" style="margin-bottom: 15px;">
+                <input type="hidden" name="asin" value="{{ book['asin'] }}">
+                <button type="submit" class="btn btn-success" style="width: 100%;">
+                    Download Now
+                </button>
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
+                    This will trigger an immediate download of this audiobook.
+                </p>
+            </form>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('delete_book', asin=book['asin']) }}" style="margin-bottom: 15px;">
+                <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Are you sure you want to delete this audiobook from the database? This will not delete the downloaded file.')">
+                    Delete from Database
+                </button>
+                <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">
+                    This will remove the book from the database but will not delete the downloaded file.
+                </p>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  audible-downloader:
+    build: .
+    container_name: audiobookDownloader
+    environment:
+      - AUDIOBOOK_FOLDERS=True
+      - SKIP_EXISTING_ON_STARTUP=False  # Set to True to mark all existing pending books as skipped on first startup
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./config:/config
+      - ./audiobooks:/audiobooks
+    restart: unless-stopped

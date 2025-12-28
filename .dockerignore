@@ -1,0 +1,9 @@
+README.md
+.git
+.gitignore
+docker-compose.yml
+config/
+audiobooks/
+*.pyc
+__pycache__/
+.DS_Store

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Library - Audible Downloader{% endblock %}
+
+{% block content %}
+<!-- Download Status Banner -->
+<div id="downloadStatus" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div style="flex: 1;">
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <div class="spinner" style="width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px;"></div>
+                <h3 id="statusTitle" style="margin: 0; font-size: 18px;">Processing...</h3>
+            </div>
+            <p id="statusMessage" style="margin: 5px 0; opacity: 0.9; font-size: 14px;">Preparing download...</p>
+            <div id="progressContainer" style="display: none; margin-top: 10px;">
+                <div style="background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px; overflow: hidden;">
+                    <div id="progressBar" style="background: white; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                </div>
+                <p id="progressText" style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.8;">0 of 0 completed</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="stats">
+    <div class="stat-card">
+        <h3>{{ total_count }}</h3>
+        <p>Total Books</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ downloaded_count }}</h3>
+        <p>Downloaded</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ pending_count }}</h3>
+        <p>Pending</p>
+    </div>
+    <div class="stat-card">
+        <h3>{{ skipped_count }}</h3>
+        <p>Skipped</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2 style="margin-bottom: 15px;">Audiobook Library</h2>
+
+    <form method="get" action="{{ url_for('index') }}" class="filters">
+        <input type="text" name="search" placeholder="Search by title, author, or series..." value="{{ search_query }}">
+        <select name="status" onchange="this.form.submit()">
+            <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Books</option>
+            <option value="downloaded" {% if status_filter == 'downloaded' %}selected{% endif %}>Downloaded</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="skipped" {% if status_filter == 'skipped' %}selected{% endif %}>Skipped</option>
+        </select>
+        <button type="submit" class="btn btn-sm">Filter</button>
+        {% if search_query or status_filter != 'all' %}
+            <a href="{{ url_for('index') }}" class="btn btn-sm btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+
+    <form method="post" id="bulkActionForm">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="submit" formaction="{{ url_for('trigger_download') }}" class="btn btn-success">Download All Pending ({{ pending_count }})</button>
+            <button type="submit" formaction="{{ url_for('mark_pending') }}" class="btn btn-warning">Mark Selected as Pending</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleAll()">Select All / None</button>
+        </div>
+
+        {% if audiobooks %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAll" onclick="toggleAll()"></th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Series</th>
+                    <th>Narrators</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for book in audiobooks %}
+                <tr>
+                    <td><input type="checkbox" name="asin" value="{{ book['asin'] }}" class="book-checkbox"></td>
+                    <td>
+                        <a href="{{ url_for('book_detail', asin=book['asin']) }}" style="text-decoration: none; color: #3498db;">
+                            {{ book['title'] }}{% if book['subtitle'] %}: {{ book['subtitle'] }}{% endif %}
+                        </a>
+                    </td>
+                <td>{{ book['authors'] }}</td>
+                <td>
+                    {% if book['series_title'] %}
+                        {{ book['series_title'] }}
+                        {% if book['series_sequence'] %}#{{ book['series_sequence'] }}{% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ book['narrators'] or '-' }}</td>
+                <td>
+                    {% if book['downloaded'] == 1 %}
+                        <span class="badge badge-success">Downloaded</span>
+                    {% elif book['downloaded'] == 0 %}
+                        <span class="badge badge-warning">Pending</span>
+                    {% else %}
+                        <span class="badge" style="background-color: #e0e0e0; color: #666;">Skipped</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('book_detail', asin=book['asin']) }}" class="btn btn-sm">View</a>
+                    <a href="{{ url_for('edit_book', asin=book['asin']) }}" class="btn btn-sm btn-warning">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+        {% else %}
+        <p style="text-align: center; padding: 40px; color: #7f8c8d;">No audiobooks found. Try refreshing your library.</p>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+    function toggleAll() {
+        const selectAll = document.getElementById('selectAll');
+        const checkboxes = document.getElementsByClassName('book-checkbox');
+        for (let checkbox of checkboxes) {
+            checkbox.checked = selectAll.checked;
+        }
+    }
+
+    // Poll for download status
+    let statusCheckInterval = null;
+
+    function updateDownloadStatus() {
+        fetch('/api/download-status')
+            .then(response => response.json())
+            .then(data => {
+                const statusBanner = document.getElementById('downloadStatus');
+                const statusTitle = document.getElementById('statusTitle');
+                const statusMessage = document.getElementById('statusMessage');
+                const progressContainer = document.getElementById('progressContainer');
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+
+                // Check if any operation is in progress
+                if (data.is_downloading || data.is_refreshing) {
+                    statusBanner.style.display = 'block';
+
+                    if (data.is_refreshing) {
+                        statusTitle.textContent = 'Refreshing Library';
+                        statusMessage.textContent = 'Fetching latest books from Audible...';
+                        progressContainer.style.display = 'none';
+                    } else if (data.is_downloading) {
+                        statusTitle.textContent = 'Downloading Audiobooks';
+
+                        if (data.current_book) {
+                            statusMessage.textContent = 'Currently downloading: ' + data.current_book;
+                        } else {
+                            statusMessage.textContent = 'Preparing downloads...';
+                        }
+
+                        // Show progress if we have total count
+                        if (data.total_to_download > 0) {
+                            progressContainer.style.display = 'block';
+                            const percentage = (data.downloaded_count / data.total_to_download) * 100;
+                            progressBar.style.width = percentage + '%';
+                            progressText.textContent = data.downloaded_count + ' of ' + data.total_to_download + ' completed';
+                        } else {
+                            progressContainer.style.display = 'none';
+                        }
+                    }
+
+                    // Show error if present
+                    if (data.error) {
+                        statusMessage.textContent = 'Error: ' + data.error;
+                        statusBanner.style.background = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
+                    }
+
+                    // Start polling if not already started
+                    if (!statusCheckInterval) {
+                        statusCheckInterval = setInterval(updateDownloadStatus, 2000);
+                    }
+                } else {
+                    // No operation in progress
+                    statusBanner.style.display = 'none';
+
+                    // Stop polling
+                    if (statusCheckInterval) {
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+
+                        // Reload the page to show updated book list
+                        if (data.last_update) {
+                            location.reload();
+                        }
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching download status:', error);
+            });
+    }
+
+    // Check status on page load
+    updateDownloadStatus();
+
+    // Also check periodically in case a download starts
+    setInterval(updateDownloadStatus, 5000);
+</script>
+
+<style>
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
